@@ -57,11 +57,13 @@ static uint16_t process_memory_words(const Process* process)
 
 static void print_process_info(const Process* process)
 {
+	const ProcessState state =
+		process == current_process ? ProcessState::RUNNING : process->state;
 	terminal_println(global_cpu, Terminal::Command,
 		"PID=", process->pid,
 		" nome=", process->name,
 		" memoria=", process_memory_words(process),
-		" palavras estado=", process_state_name(process->state));
+		" palavras estado=", process_state_name(state));
 }
 
 void boot(Arch::Cpu *cpu)
@@ -205,6 +207,36 @@ static void parse_command(const char* cmd)
 		}
 	}
 
+	else if (command.starts_with("timer ")) {
+		std::string_view args = command.substr(6);
+		while (!args.empty() && args.front() == ' ')
+			args.remove_prefix(1);
+
+		uint32_t cycles = 0;
+		bool valid = !args.empty();
+		for (char c : args) {
+			if (c < '0' || c > '9') {
+				valid = false;
+				break;
+			}
+			cycles = cycles * 10 + static_cast<uint32_t>(c - '0');
+			if (cycles > UINT16_MAX) {
+				valid = false;
+				break;
+			}
+		}
+
+		if (!valid || cycles == 0) {
+			terminal_println(global_cpu, Terminal::Command,
+				"Uso: timer <ciclos> (ciclos deve ser maior que zero)");
+		} else {
+			global_cpu->write_io(IO_Port::TimerInterruptCycles,
+				static_cast<uint16_t>(cycles));
+			terminal_println(global_cpu, Terminal::Command,
+				"Timer configurado para ", cycles, " ciclos.");
+		}
+	}
+
 	else if (command == "help") {
 		terminal_println(global_cpu, Terminal::Command,
 			"Comandos disponiveis:");
@@ -214,6 +246,8 @@ static void parse_command(const char* cmd)
 			"  load <programa>   Carrega um programa.");
 		terminal_println(global_cpu, Terminal::Command,
 			"  ps                Lista os processos.");
+		terminal_println(global_cpu, Terminal::Command,
+			"  timer <ciclos>    Configura o intervalo do timer.");
 		terminal_println(global_cpu, Terminal::Command,
 			"  kill <pid>        Finaliza o processo informado.");
 		terminal_println(global_cpu, Terminal::Command,
@@ -296,6 +330,35 @@ void syscall()
 			uint16_t value = global_cpu->get_gpr(1);
 			terminal_print(global_cpu, Terminal::App, value);
 		}
+		break;
+
+		case 6:
+		{
+			if (current_process == idle_process) {
+				terminal_println(global_cpu, Terminal::Kernel,
+					"O idle nao pode dormir.");
+				break;
+			}
+
+			const uint16_t duration = global_cpu->get_gpr(1);
+			if (duration == 0) {
+				terminal_println(global_cpu, Terminal::Command,
+					"A syscall de dormir exige um tempo maior que zero.");
+				break;
+			}
+
+			const uint16_t now =
+				global_cpu->read_io(IO_Port::TimerGetTimeSeconds);
+			current_process->wake_up_time =
+				static_cast<uint16_t>(now + duration);
+			current_process->state = ProcessState::SLEEPING;
+			schedule();
+		}
+		break;
+
+		case 7:
+			global_cpu->set_gpr(1,
+				global_cpu->read_io(IO_Port::TimerGetTimeSeconds));
 		break;
 
 		default:

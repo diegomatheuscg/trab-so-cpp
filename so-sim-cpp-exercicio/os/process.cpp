@@ -69,10 +69,27 @@ void restore_context(Process* p)
     global_cpu->set_page_table(&p->page_table);
 }
 
+void check_sleeping_processes()
+{
+    const uint16_t now = global_cpu->read_io(IO_Port::TimerGetTimeSeconds);
+
+    for (auto* process : process_list) {
+        if (process->state == ProcessState::SLEEPING) {
+            const int16_t remaining =
+                static_cast<int16_t>(process->wake_up_time - now);
+            if (remaining <= 0)
+                process->state = ProcessState::READY;
+        }
+    }
+}
+
 void schedule()
 {
+    check_sleeping_processes();
+
     if (current_process == idle_process) {
         save_context(idle_process);
+        idle_process->state = ProcessState::READY;
     } else if (current_process != nullptr) {
         save_context(current_process);
         if (current_process->state == ProcessState::RUNNING) {
@@ -85,7 +102,7 @@ void schedule()
     }
 
     if (!process_list.empty()) {
-        current_it = process_list.begin();
+        current_it = process_list.end();
         for (auto it = process_list.begin(); it != process_list.end(); ++it) {
             if ((*it)->state == ProcessState::READY) {
                 current_it = it;
@@ -93,12 +110,18 @@ void schedule()
             }
         }
 
-        current_process = *current_it;
-        current_process->state = ProcessState::RUNNING;
-        restore_context(current_process);
-    } else {
+        if (current_it != process_list.end()) {
+            current_process = *current_it;
+            current_process->state = ProcessState::RUNNING;
+            restore_context(current_process);
+            return;
+        }
+    }
+
+    {
         current_it = process_list.end();
         current_process = idle_process;
+        idle_process->state = ProcessState::RUNNING;
         restore_context(idle_process);
     }
 }

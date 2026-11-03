@@ -42,6 +42,7 @@ constexpr int total_frames = Config::phys_mem_size_words / Config::page_size;
 
 void save_context(Process* p);
 void restore_context(Process* p);
+void check_sleeping_processes();
 void schedule();
 
 Process* init_process(const char* name);
