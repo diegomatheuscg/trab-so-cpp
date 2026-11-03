@@ -83,20 +83,14 @@ void interrupt(const InterruptCode interrupt)
 		case InterruptCode::CpuException: {
 			const auto &cpu_exception = global_cpu->get_ref_cpu_exception();
 			if (cpu_exception.type == CpuException::Type::VmemPageFault) {
-				Process *p = (current_process != nullptr) ? current_process : idle_process;
-				if (p != nullptr) {
-					const uint16_t page = cpu_exception.vaddr / Config::page_size;
-					if (!load_page(p, page)) {
-						if (current_process != nullptr) {
-							terminal_println(global_cpu, Terminal::Kernel,
-								"Falha de pagina invalida. Processo sera finalizado.");
-							kill_process(current_process);
-						} else {
-							terminal_println(global_cpu, Terminal::Kernel,
-								"Falha de pagina no idle. SO sera desligado");
-							global_cpu->turn_off();
-						}
-					}
+				if (current_process != idle_process) {
+					terminal_println(global_cpu, Terminal::Kernel,
+						"Falha de pagina invalida. Processo sera finalizado.");
+					kill_process(current_process);
+				} else {
+					terminal_println(global_cpu, Terminal::Kernel,
+						"Falha de pagina no idle. SO sera desligado");
+					global_cpu->turn_off();
 				}
 			}
 			else switch (cpu_exception.type) {
@@ -106,7 +100,7 @@ void interrupt(const InterruptCode interrupt)
 					terminal_print(global_cpu, Terminal::Kernel,
 						"GPF de protecao (", cpu_exception.type,
 						", vaddr=", cpu_exception.vaddr, ").\n");
-					if (current_process != nullptr)
+					if (current_process != idle_process)
 						kill_process(current_process);
 					else
 						global_cpu->turn_off();
@@ -115,7 +109,7 @@ void interrupt(const InterruptCode interrupt)
 				case CpuException::Type::GPFinvalidInstruction: {
 					terminal_print(global_cpu, Terminal::Kernel,
 						"Instrucao invalida (vaddr=", cpu_exception.vaddr, ").\n");
-					if (current_process != nullptr)
+					if (current_process != idle_process)
 						kill_process(current_process);
 					else
 						global_cpu->turn_off();
@@ -190,12 +184,12 @@ void syscall()
 {
 	const uint16_t syscall_num = global_cpu->get_gpr(0);
 
-	Process* p = (current_process != nullptr) ? current_process : idle_process;
+	Process* p = current_process;
 
 	switch (syscall_num) {
 
 		case 0:
-			if (current_process != nullptr)
+			if (current_process != idle_process)
 				kill_process(current_process);
 		break;
 
@@ -209,16 +203,8 @@ void syscall()
 				uint16_t offset = addr & (Config::page_size - 1);
 				auto &pte = p->page_table[pagina];
 
-				if (pte[Arch::Cpu::PteField::Present] == 0) {
-					if (!load_page(p, pagina)) {
-						terminal_println(global_cpu, Terminal::Kernel,
-							"Falha ao carregar pagina durante syscall 1.");
-						fault = true;
-						break;
-					}
-				}
-
-				if (pte[Arch::Cpu::PteField::Readable] == 0) {
+				if (pte[Arch::Cpu::PteField::Present] == 0 ||
+					pte[Arch::Cpu::PteField::Readable] == 0) {
 					terminal_println(global_cpu, Terminal::Kernel,
 						"GPF: pagina sem permissao de leitura durante syscall 1.");
 					fault = true;
@@ -237,7 +223,7 @@ void syscall()
 			}
 
 			if (fault) {
-				if (current_process != nullptr)
+				if (current_process != idle_process)
 					kill_process(current_process);
 				else
 					global_cpu->turn_off();
