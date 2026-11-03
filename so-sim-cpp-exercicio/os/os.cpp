@@ -33,6 +33,37 @@ static void redraw_line()
 	}
 }
 
+static const char* process_state_name(const ProcessState state)
+{
+	switch (state) {
+		case ProcessState::READY: return "READY";
+		case ProcessState::RUNNING: return "RUNNING";
+		case ProcessState::SLEEPING: return "SLEEPING";
+		case ProcessState::WAITING_DISK: return "WAITING_DISK";
+		case ProcessState::DEAD: return "DEAD";
+	}
+	return "UNKNOWN";
+}
+
+static uint16_t process_memory_words(const Process* process)
+{
+	uint16_t pages = 0;
+	for (const auto& pte : process->page_table) {
+		if (pte.get(Arch::Cpu::PteField::Present) == 1)
+			pages++;
+	}
+	return static_cast<uint16_t>(pages * Config::page_size);
+}
+
+static void print_process_info(const Process* process)
+{
+	terminal_println(global_cpu, Terminal::Command,
+		"PID=", process->pid,
+		" nome=", process->name,
+		" memoria=", process_memory_words(process),
+		" palavras estado=", process_state_name(process->state));
+}
+
 void boot(Arch::Cpu *cpu)
 {
 	global_cpu = cpu;
@@ -172,6 +203,29 @@ static void parse_command(const char* cmd)
 			}
 			kill_process_by_pid(pid);
 		}
+	}
+
+	else if (command == "help") {
+		terminal_println(global_cpu, Terminal::Command,
+			"Comandos disponiveis:");
+		terminal_println(global_cpu, Terminal::Command,
+			"  help              Mostra esta ajuda.");
+		terminal_println(global_cpu, Terminal::Command,
+			"  load <programa>   Carrega um programa.");
+		terminal_println(global_cpu, Terminal::Command,
+			"  ps                Lista os processos.");
+		terminal_println(global_cpu, Terminal::Command,
+			"  kill <pid>        Finaliza o processo informado.");
+		terminal_println(global_cpu, Terminal::Command,
+			"  exit              Encerra o sistema.");
+	}
+
+	else if (command == "ps") {
+		terminal_println(global_cpu, Terminal::Command,
+			"PID nome memoria estado");
+		print_process_info(idle_process);
+		for (const auto* process : process_list)
+			print_process_info(process);
 	}
 
 	else {
