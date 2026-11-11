@@ -2,6 +2,7 @@
 #define __ARQSIM_HEADER_OS_H__
 
 #include <cstdint>
+#include <string_view>
 
 #include <my-lib/std.h>
 #include <my-lib/macros.h>
@@ -33,6 +34,9 @@ void interrupt (const InterruptCode interrupt);
 void syscall ();
 
 // ---------------------------------------
+
+void start_disk_load (std::string_view name);
+void finish_disk_load ();
 
 } // end namespace
 

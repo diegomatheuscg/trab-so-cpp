@@ -1,5 +1,4 @@
 #include <stdexcept>
-#include <string>
 #include <string_view>
 
 #include <cstdint>
@@ -11,6 +10,7 @@
 #include "os.h"
 #include "os-lib.h"
 #include "process.h"
+#include "disk.h"
 
 namespace OS {
 
@@ -113,6 +113,10 @@ void interrupt(const InterruptCode interrupt)
 			schedule();
 		break;
 
+		case InterruptCode::Disk:
+			OS::finish_disk_load();
+		break;
+
 		case InterruptCode::CpuException: {
 			const auto &cpu_exception = global_cpu->get_ref_cpu_exception();
 			if (cpu_exception.type == CpuException::Type::VmemPageFault) {
@@ -183,8 +187,7 @@ static void parse_command(const char* cmd)
 				"Uso: load <programa>");
 		}
 		else {
-			std::string name_str(program_name);
-			load_program(name_str.c_str());
+			start_disk_load(program_name);
 		}
 	}
 

@@ -97,8 +97,6 @@ void schedule()
             if (current_it != process_list.end())
                 process_list.splice(process_list.end(), process_list, current_it);
         }
-    } else if (idle_process != nullptr) {
-        save_context(idle_process);
     }
 
     if (!process_list.empty()) {
@@ -126,7 +124,8 @@ void schedule()
     }
 }
 
-Process* init_process(const char* name)
+static Process* init_process_with_image(const char* name,
+    const std::vector<uint16_t>& disk_image)
 {
     Process* p = new Process;
 
@@ -148,14 +147,6 @@ Process* init_process(const char* name)
 
     for (int i = 0; i < Config::ptes_per_table; i++)
         p->page_table[i] = 0;
-
-    std::vector<uint16_t> disk_image;
-    try {
-        disk_image = Lib::load_from_disk_to_16bit_buffer(name);
-    } catch (...) {
-        delete p;
-        return nullptr;
-    }
 
     const int num_code_pages =
         (static_cast<int>(disk_image.size()) + Config::page_size - 1) / Config::page_size;
@@ -187,6 +178,24 @@ Process* init_process(const char* name)
     }
 
     return p;
+}
+
+Process* init_process(const char* name)
+{
+    try {
+        return init_process_with_image(name,
+            Lib::load_from_disk_to_16bit_buffer(name));
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+Process* init_process_from_image(const char* name,
+    const std::vector<uint16_t>& image)
+{
+    if (image.empty())
+        return nullptr;
+    return init_process_with_image(name, image);
 }
 
 void load_idle()
@@ -247,7 +256,7 @@ void kill_process(Process* p)
     }
 
     if (was_running)
-        current_process = idle_process;
+        current_process = nullptr;
 
     delete p;
 

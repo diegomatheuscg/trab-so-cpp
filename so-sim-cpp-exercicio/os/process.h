@@ -46,6 +46,8 @@ void check_sleeping_processes();
 void schedule();
 
 Process* init_process(const char* name);
+Process* init_process_from_image(const char* name,
+    const std::vector<uint16_t>& image);
 void load_idle();
 void load_program(const char* name);
 void kill_process(Process* p);
